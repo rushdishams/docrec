@@ -2,8 +2,11 @@ package com.sustainalytics.taggeneration;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.mcavallo.opencloud.Cloud;
 import org.mcavallo.opencloud.Tag;
 import org.mcavallo.opencloud.filters.LengthFilter;
@@ -19,31 +22,51 @@ import weka.core.Instances;
  * A runnable jar file that takes file name as input and predicts its ESG document type
  * The prediction is based on a Naive Bayes model generated from keywords attached
  * to documents.  
+ * 
+ * CHANGE:
+ * Instead of sending one file, the program now reads all the files in a directory.
  * @author Rushdi Shams
- * @version 0.3 October 16 2015
+ * @version 0.5 October 20 2015
  *
  */
 
 public class FeatureGeneration {
 	public static void main(String[] args){
-		String text = "";
-		try {
-			text = FileUtils.readFileToString(new File(args[0]));
-		} catch (IOException e) {
-			System.out.println("Error reading input file. Exiting.");
-			System.exit(1);
+		
+Instant start = Instant.now();
+    	
+    	File folder = new File(args[0]);
+    	if(!folder.isDirectory()){
+    		System.out.println("Input must be a directory.");
+    		System.exit(1);
+    	}
+		File[] listOfFiles = folder.listFiles();
+		for (int i = 0; i < listOfFiles.length; i++){
+			if(FilenameUtils.getExtension(listOfFiles[i].getAbsolutePath()).equalsIgnoreCase("pdf")){
+				
+			String text = "";
+			try {
+				text = FileUtils.readFileToString(new File(FilenameUtils.removeExtension(listOfFiles[i].getAbsolutePath()) + ".txt"));
+			} catch (IOException e) {
+				System.out.println(listOfFiles[i].getName() + "--No associated .txt file for the PDF. Moving to the next file.");
+				continue;
+			}
+			
+			String tagFeatures = getTags(text);
+			
+			Classifier nb = loadModel();
+			
+			//		System.out.println("File " + args[0] + "---->");
+			classify(tagFeatures, nb, listOfFiles[i].getName());
+			}
+			
 		}
-
-		String tagFeatures = getTags(text);
-
-		Classifier nb = loadModel();
-
-		//		System.out.println("File " + args[0] + "---->");
-		classify(tagFeatures, nb);
-
+		Instant end = Instant.now();
+		System.out.println("Completion time: " + Duration.between(start, end));
 	}
 
-	public static void classify(String tagFeatures, Classifier nb){
+	public static void classify(String tagFeatures, Classifier nb, String fileName){
+		
 		Attribute attribute = new Attribute("text", (FastVector) null);
 		FastVector fvClassVal = new FastVector(7);
 		fvClassVal.addElement("AR");
@@ -80,11 +103,9 @@ public class FeatureGeneration {
 		}
 		labeled.instance(0).setClassValue(clsLabel);
 		
-		System.out.println(labeled.classAttribute().value((int) clsLabel));
 
 		double predictionProbability = predictionDistribution[(int) clsLabel];
-
-		System.out.println(predictionProbability );
+		System.out.println(fileName + "\t" + labeled.classAttribute().value((int) clsLabel) + "\t" + predictionProbability);
 
 	}
 
