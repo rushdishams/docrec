@@ -14,7 +14,9 @@ import org.mcavallo.opencloud.filters.LengthFilter;
 import com.boundary.sentence.TextContent;
 
 import weka.classifiers.Classifier;
+import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.functions.SMO;
+import weka.classifiers.trees.RandomForest;
 import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
@@ -25,9 +27,9 @@ import weka.core.Instances;
  * The prediction is based on an SVM model generated from the tf of the text.  
  * 
  * CHANGE:
- * Instead of sending one file, the program now reads all the files in a directory.
+ * Three class instead of seven. Naive Bayes instead of SMO.
  * @author Rushdi Shams
- * @version 0.6 October 21 2015
+ * @version 0.7 October 23 2015
  *
  */
 
@@ -76,7 +78,7 @@ public class FeatureGeneration {
 		//		String cleanText = "";
 		for (String str : content){
 			//			cleanText += str + " ";
-			strBuilder.append(str + " ");
+			strBuilder.append(str.trim() + " ");
 		}
 		String cleanText = strBuilder.toString();
 		cleanText = cleanText.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll("\"", "").replaceAll("\'", "");
@@ -88,11 +90,7 @@ public class FeatureGeneration {
 
 		Attribute docText = new Attribute("doc-text", (FastVector) null);
 		
-		FastVector fvClassVal = new FastVector(7);
-		fvClassVal.addElement("AR");
-		fvClassVal.addElement("CSR");
-		fvClassVal.addElement("CC");
-		fvClassVal.addElement("COC");
+		FastVector fvClassVal = new FastVector(3);
 		fvClassVal.addElement("MISC");
 		fvClassVal.addElement("POLICY");
 		fvClassVal.addElement("NOISE");
@@ -107,7 +105,7 @@ public class FeatureGeneration {
 
 		Instance iExample = new Instance(2);
 		iExample.setValue((Attribute)fvWekaAttributes.elementAt(0), "\"" + cleanedText + "\"");
-		iExample.setValue((Attribute)fvWekaAttributes.elementAt(1), "CSR");
+		iExample.setValue((Attribute)fvWekaAttributes.elementAt(1), "MISC");
 		
 		isTrainingSet.add(iExample);
 
@@ -130,18 +128,18 @@ public class FeatureGeneration {
 	}
 
 	public static Classifier loadModel(String modelPath){
-		Classifier smo = (Classifier)new SMO();
-		String[] options = null;
-		try {
-			options = weka.core.Utils.splitOptions("-C 1.0 -L 0.001 -P 1.0E-12 -N 0 -M -V -1 -W 1 -K \"weka.classifiers.functions.supportVector.NormalizedPolyKernel -C 250007 -E 2.0\"");
-		} catch (Exception e1) {
-			System.out.println("Options could not be created");
-		}
-		try {
-			smo.setOptions(options);
-		} catch (Exception e1) {
-			System.out.println("Set options did not work");
-		}
+		Classifier smo = (Classifier)new NaiveBayes();
+//		String[] options = null;
+//		try {
+//			options = weka.core.Utils.splitOptions("-I 100 -K 0 -S 1");
+//		} catch (Exception e1) {
+//			System.out.println("Options could not be created");
+//		}
+//		try {
+//			smo.setOptions(options);
+//		} catch (Exception e1) {
+//			System.out.println("Set options did not work");
+//		}
 		try {
 			smo = (Classifier) weka.core.SerializationHelper.read(modelPath);
 		} catch (Exception e) {
