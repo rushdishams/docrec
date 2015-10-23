@@ -27,13 +27,14 @@ import weka.core.Instances;
  * The prediction is based on an SVM model generated from the tf of the text.  
  * 
  * CHANGE:
- * Three class instead of seven. Naive Bayes instead of SMO.
+ * Two Class rather than three. It considers document length as a feature too.
  * @author Rushdi Shams
- * @version 0.7 October 23 2015
+ * @version 0.8 October 23 2015
  *
  */
 
 public class FeatureGeneration {
+	private static int length;
 	public static void main(String[] args){
 
 		Instant start = Instant.now();
@@ -74,6 +75,7 @@ public class FeatureGeneration {
 		t.setText(text);
 		t.setSentenceBoundary();
 		String[] content = t.getSentence();
+		length = content.length;
 		StringBuilder strBuilder = new StringBuilder();
 		//		String cleanText = "";
 		for (String str : content){
@@ -89,23 +91,25 @@ public class FeatureGeneration {
 	public static void classify(String cleanedText, Classifier smo, String fileName){
 
 		Attribute docText = new Attribute("doc-text", (FastVector) null);
+		Attribute docLength = new Attribute("doc-length");
 		
-		FastVector fvClassVal = new FastVector(3);
+		FastVector fvClassVal = new FastVector(2);
 		fvClassVal.addElement("MISC");
-		fvClassVal.addElement("POLICY");
 		fvClassVal.addElement("NOISE");
 		Attribute classAttribute = new Attribute("doc_class", fvClassVal);
 
-		FastVector fvWekaAttributes = new FastVector(2);
+		FastVector fvWekaAttributes = new FastVector(3);
 		fvWekaAttributes.addElement(docText);
+		fvWekaAttributes.addElement(docLength);
 		fvWekaAttributes.addElement(classAttribute);
 
 		Instances isTrainingSet = new Instances("Relation", fvWekaAttributes, 1);
-		isTrainingSet.setClassIndex(1);
+		isTrainingSet.setClassIndex(2);
 
-		Instance iExample = new Instance(2);
+		Instance iExample = new Instance(3);
 		iExample.setValue((Attribute)fvWekaAttributes.elementAt(0), "\"" + cleanedText + "\"");
-		iExample.setValue((Attribute)fvWekaAttributes.elementAt(1), "MISC");
+		iExample.setValue((Attribute)fvWekaAttributes.elementAt(1), length);
+		iExample.setValue((Attribute)fvWekaAttributes.elementAt(2), "MISC");
 		
 		isTrainingSet.add(iExample);
 
