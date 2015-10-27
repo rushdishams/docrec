@@ -7,166 +7,174 @@ import java.time.Instant;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
-import org.mcavallo.opencloud.Cloud;
-import org.mcavallo.opencloud.Tag;
-import org.mcavallo.opencloud.filters.LengthFilter;
 
 import com.boundary.sentence.TextContent;
 
 import weka.classifiers.Classifier;
 import weka.classifiers.bayes.NaiveBayes;
-import weka.classifiers.functions.SMO;
-import weka.classifiers.trees.RandomForest;
 import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
 import weka.core.Instances;
 
 /**
- * A runnable jar file that takes directory name as input and predicts its files' ESG document type.
- * The prediction is based on an SVM model generated from the tf of the text.  
+ * A runnable jar file that takes directory name as input and predicts its
+ * files' ESG document type. The prediction is based on an SVM model generated
+ * from the tf of the text.
  * 
- * CHANGE:
- * Two Class rather than three. It considers document length as a feature too.
+ * CHANGE: Two Class rather than three. It considers document length as a
+ * feature too.
+ * 
  * @author Rushdi Shams
- * @version 0.8 October 23 2015
+ * @version 0.9 October 27 2015
  *
  */
 
 public class FeatureGeneration {
-	private static int length;
-	public static void main(String[] args){
+	private int length;
+	private Classifier classifier;
+	private File folder;
+	private String modelPath, text, cleanedText, currentFileName;
+	private File[] listOfFiles;
+	private Instances labeled;
+	private double clsLabel = 0, predictionProbability = 0;
+	private Attribute docText, docLength, classAttribute;
 
-		Instant start = Instant.now();
+	private FastVector fvClassVal, fvWekaAttributes;
 
-		File folder = new File(args[0]);
-		String modelPath = args[1];
-		if(!folder.isDirectory()){
-			System.out.println("Input must be a directory.");
-			System.exit(1);
-		}
-		File[] listOfFiles = folder.listFiles();
-		for (int i = 0; i < listOfFiles.length; i++){
-			if(FilenameUtils.getExtension(listOfFiles[i].getAbsolutePath()).equalsIgnoreCase("pdf")){
 
-				String text = "";
-				try {
-					text = FileUtils.readFileToString(new File(FilenameUtils.removeExtension(listOfFiles[i].getAbsolutePath()) + ".txt"));
-				} catch (IOException e) {
-					System.out.println(listOfFiles[i].getName() + "--No associated .txt file for the PDF. Moving to the next file.");
-					continue;
-				}
+	private Instances isTrainingSet;
 
-				String cleanedText = cleanText(text);
+	private Instance iExample;
 
-				Classifier smo = loadModel(modelPath);
+	public FeatureGeneration(String directory, String modelPath) {
+		this.folder = new File(directory);
+		this.listOfFiles = folder.listFiles();
+		this.modelPath = modelPath;
 
-				//		System.out.println("File " + args[0] + "---->");
-				classify(cleanedText, smo, listOfFiles[i].getName());
-			}
-
-		}
-		Instant end = Instant.now();
-		System.out.println("Completion time: " + Duration.between(start, end));
 	}
 
-	public static String cleanText(String text){
-		TextContent t = new TextContent(); //creating TextContent object
-		t.setText(text);
+	public File[] getListOfFiles() {
+		return this.listOfFiles;
+	}
+
+	public void setText(String text) {
+		this.text = text;
+	}
+
+	public void setCurrentFileName(String currentFileName) {
+		this.currentFileName = currentFileName;
+
+	}
+
+	public String toString() {
+		return currentFileName + "\t" + labeled.classAttribute().value((int) clsLabel) + "\t" + predictionProbability;
+	}
+
+	
+
+	public void cleanText() {
+		TextContent t = new TextContent(); // creating TextContent object
+		t.setText(this.text);
 		t.setSentenceBoundary();
 		String[] content = t.getSentence();
-		length = content.length;
+		this.length = content.length;
 		StringBuilder strBuilder = new StringBuilder();
-		//		String cleanText = "";
-		for (String str : content){
-			//			cleanText += str + " ";
+		for (String str : content) {
 			strBuilder.append(str.trim() + " ");
 		}
 		String cleanText = strBuilder.toString();
 		cleanText = cleanText.replaceAll("\r", " ").replaceAll("\n", " ").replaceAll("\"", "").replaceAll("\'", "");
-//		System.out.println(cleanText);
-		return cleanText;
+		this.cleanedText = cleanText;
 	}
+	
+	public void initializeDataset(){
+		this.docText = new Attribute("doc-text", (FastVector) null);
+		this.docLength = new Attribute("doc-length");
 
-	public static void classify(String cleanedText, Classifier smo, String fileName){
+		this.fvClassVal = new FastVector(2);
+		this.fvClassVal.addElement("MISC");
+		this.fvClassVal.addElement("NOISE");
+		this.classAttribute = new Attribute("doc_class", fvClassVal);
 
-		Attribute docText = new Attribute("doc-text", (FastVector) null);
-		Attribute docLength = new Attribute("doc-length");
-		
-		FastVector fvClassVal = new FastVector(2);
-		fvClassVal.addElement("MISC");
-		fvClassVal.addElement("NOISE");
-		Attribute classAttribute = new Attribute("doc_class", fvClassVal);
+		this.fvWekaAttributes = new FastVector(3);
+		this.fvWekaAttributes.addElement(docText);
+		this.fvWekaAttributes.addElement(docLength);
+		this.fvWekaAttributes.addElement(classAttribute);
 
-		FastVector fvWekaAttributes = new FastVector(3);
-		fvWekaAttributes.addElement(docText);
-		fvWekaAttributes.addElement(docLength);
-		fvWekaAttributes.addElement(classAttribute);
-
-		Instances isTrainingSet = new Instances("Relation", fvWekaAttributes, 1);
+		isTrainingSet = new Instances("Relation", fvWekaAttributes, 1);
 		isTrainingSet.setClassIndex(2);
 
-		Instance iExample = new Instance(3);
-		iExample.setValue((Attribute)fvWekaAttributes.elementAt(0), "\"" + cleanedText + "\"");
-		iExample.setValue((Attribute)fvWekaAttributes.elementAt(1), length);
-		iExample.setValue((Attribute)fvWekaAttributes.elementAt(2), "MISC");
+		iExample = new Instance(3);
+	}
+
+	public void classify() {
+
 		
-		isTrainingSet.add(iExample);
+		this.iExample.setValue((Attribute) fvWekaAttributes.elementAt(0), "\"" + this.cleanedText + "\"");
+		this.iExample.setValue((Attribute) fvWekaAttributes.elementAt(1), this.length);
+		this.iExample.setValue((Attribute) fvWekaAttributes.elementAt(2), "MISC");
 
-		Instances labeled = new Instances(isTrainingSet);
+		this.isTrainingSet.add(iExample);
 
-		double clsLabel = 0;
+		this.labeled = new Instances(isTrainingSet);
+		
 		double[] predictionDistribution = null;
 		try {
-			clsLabel = smo.classifyInstance(isTrainingSet.instance(0));
-			predictionDistribution = smo.distributionForInstance(isTrainingSet.instance(0));
+			this.clsLabel = this.classifier.classifyInstance(isTrainingSet.instance(0));
+			predictionDistribution = classifier.distributionForInstance(isTrainingSet.instance(0));
 		} catch (Exception e) {
 			System.out.println("Unable to classify item\n");
 		}
-		labeled.instance(0).setClassValue(clsLabel);
+		this.labeled.instance(0).setClassValue(clsLabel);
 
-
-		double predictionProbability = predictionDistribution[(int) clsLabel];
-		System.out.println(fileName + "\t" + labeled.classAttribute().value((int) clsLabel) + "\t" + predictionProbability);
+		this.predictionProbability = predictionDistribution[(int) clsLabel];
 
 	}
 
-	public static Classifier loadModel(String modelPath){
-		Classifier smo = (Classifier)new NaiveBayes();
-//		String[] options = null;
-//		try {
-//			options = weka.core.Utils.splitOptions("-I 100 -K 0 -S 1");
-//		} catch (Exception e1) {
-//			System.out.println("Options could not be created");
-//		}
-//		try {
-//			smo.setOptions(options);
-//		} catch (Exception e1) {
-//			System.out.println("Set options did not work");
-//		}
+	public void loadModel() {
+		this.classifier = (Classifier) new NaiveBayes();
 		try {
-			smo = (Classifier) weka.core.SerializationHelper.read(modelPath);
+			this.classifier = (Classifier) weka.core.SerializationHelper.read(this.modelPath);
 		} catch (Exception e) {
 			System.out.println("Model file not found. Exiting.");
 			System.exit(1);
 		}
-		return smo;
 	}
+	
+	public static void main(String[] args) {
 
-	public static String getTags(String text){
-		Cloud cloud = new Cloud();
-		LengthFilter lengthFilter = new LengthFilter(10, 20);
-		cloud.addInputFilter(lengthFilter);
-		cloud.addText(text);
-		cloud.setMaxTagsToDisplay(20);
+		Instant start = Instant.now();
 
-		String weka = "\"";
-		for (Tag tag : cloud.tags(new Tag.ScoreComparatorDesc())){
-			weka += tag.getName() + " ";
+		if (!new File(args[0]).isDirectory()) {
+			System.out.println("Input must be a directory.");
+			System.exit(1);
 		}
-		weka += "\"";
-		return weka;
 
+		FeatureGeneration test = new FeatureGeneration(args[0], args[1]);
+		test.loadModel();
+		File[] listOfFiles = test.getListOfFiles();
+		for (int i = 0; i < listOfFiles.length; i++) {
+			if (FilenameUtils.getExtension(listOfFiles[i].getAbsolutePath()).equalsIgnoreCase("pdf")) {
+				try {
+					test.setText(FileUtils.readFileToString(
+							new File(FilenameUtils.removeExtension(listOfFiles[i].getAbsolutePath()) + ".txt")));
+				} catch (IOException e) {
+					System.out.println(listOfFiles[i].getName()
+							+ "--No associated .txt file for the PDF. Moving to the next file.");
+					continue;
+				}
+
+				test.setCurrentFileName(listOfFiles[i].getName());
+				test.cleanText();
+				test.initializeDataset();
+				test.classify();
+				System.out.println(test.toString());
+				System.gc();
+			}
+		}
+
+		Instant end = Instant.now();
+		System.out.println("Completion time: " + Duration.between(start, end));
 	}
-
 }
