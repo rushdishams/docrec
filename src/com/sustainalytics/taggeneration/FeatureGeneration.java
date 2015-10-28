@@ -24,7 +24,7 @@ import weka.core.Instances;
  * CHANGE: Object oriented structure
  * 
  * @author Rushdi Shams
- * @version 0.9 October 28 2015
+ * @version 0.10 October 28 2015
  *
  */
 
